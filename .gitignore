@@ -14,13 +14,6 @@ myven/
 .env
 .env.*
 
-# SQLite database
-database.db-wal
-
-database.db-shm
-*.sqlite
-*.sqlite3
-
 # OS files
 .DS_Store
 Thumbs.db
