@@ -24,3 +24,9 @@ Thumbs.db
 
 # Logs
 *.log
+database.db
+database_test.db
+*.tmp
+.env
+myven/
+__pycache__/
