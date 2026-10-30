@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <meta
+        name="description"
+        content="Cocoa & Co. AI Business Analytics Dashboard"
+    >
+
+    <title>
+        {% block title %}
+        Cocoa & Co.
+        {% endblock %}
+    </title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='style.css') }}"
+    >
+
+</head>
+
+
+<body>
+
+    <!-- Navigation -->
+
+    <nav class="navbar">
+
+        <div class="nav-container">
+
+            <a href="/" class="brand">
+
+                <span class="brand-icon">🍫</span>
+
+                <span class="brand-name">
+                    Cocoa & Co.
+                </span>
+
+            </a>
+
+
+            <div class="nav-right">
+
+                <span class="status-dot"></span>
+
+                <span class="status-text">
+                    AI Analytics
+                </span>
+
+            </div>
+
+        </div>
+
+    </nav>
+
+
+    <!-- Main Content -->
+
+    <main class="main-content">
+
+        {% block content %}
+        {% endblock %}
+
+    </main>
+
+
+    <!-- Footer -->
+
+    <footer class="footer">
+
+        <p>
+            Cocoa & Co. · AI-powered business intelligence
+        </p>
+
+    </footer>
+
+</body>
+
+</html>
