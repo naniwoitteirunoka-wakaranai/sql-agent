@@ -107,7 +107,7 @@ def get_db():
 # --------------------------------------------------
 
 DATABASE_SCHEMA = """
-Database: Cocoa & Co. handmade chocolate business
+Database: Veloura Chocolates handmade chocolate business
 
 TABLE customers
 - id INTEGER PRIMARY KEY
@@ -225,7 +225,7 @@ def is_safe_sql(sql):
 def generate_sql(question):
 
     system_prompt = f"""
-You are the SQL analyst for Cocoa & Co.,
+You are the SQL analyst for Veloura Chocolates,
 a handmade chocolate company.
 
 Convert business questions into SQLite SQL queries.
@@ -310,7 +310,7 @@ def explain_result(question, sql, columns, rows):
     }
 
     prompt = f"""
-You are a business analyst for Cocoa & Co.
+You are a business analyst for Veloura Chocolates.
 
 The user asked:
 {question}
