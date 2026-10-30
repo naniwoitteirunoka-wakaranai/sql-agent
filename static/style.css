@@ -1,5 +1,5 @@
 /* =========================================================
-   Cocoa & Co. AI Dashboard
+   Veloura Chocolates · AI Dashboard
    Dark Chocolate Theme
    ========================================================= */
 
@@ -360,7 +360,7 @@ body {
     display: flex;
     gap: 12px;
 
-    align-items: stretch;
+    align-items: flex-end;
 }
 
 
@@ -370,11 +370,15 @@ textarea {
 
     min-width: 0;
 
-    resize: vertical;
+    resize: none;
 
-    min-height: 82px;
+    height: 58px;
+    min-height: 58px;
+    max-height: 220px;
 
-    padding: 17px 18px;
+    overflow-y: hidden;
+
+    padding: 16px 18px;
 
     color: var(--cream);
 
@@ -389,6 +393,8 @@ textarea {
     font: inherit;
 
     font-size: 0.95rem;
+
+    line-height: 1.5;
 
     transition:
         border-color 0.2s ease,
@@ -413,6 +419,11 @@ textarea:focus {
 }
 
 
+textarea:not(:placeholder-shown) {
+    overflow-y: auto;
+}
+
+
 /* ---------------------------------------------------------
    Ask Button
    --------------------------------------------------------- */
@@ -420,6 +431,9 @@ textarea:focus {
 #askButton {
 
     width: 130px;
+    min-height: 58px;
+
+    flex-shrink: 0;
 
     border: none;
 
@@ -935,7 +949,9 @@ tbody tr:last-child td {
 
 
     textarea {
+        height: 110px;
         min-height: 110px;
+        max-height: 220px;
     }
 
 }
