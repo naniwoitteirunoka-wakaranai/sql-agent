@@ -1,0 +1,431 @@
+{% extends "base.html" %}
+
+{% block title %}Cocoa & Co. AI Dashboard{% endblock %}
+
+{% block content %}
+
+<div class="dashboard">
+
+    <!-- Header -->
+    <header class="dashboard-header">
+        <div>
+            <p class="eyebrow">COCOA & CO. · AI ANALYTICS</p>
+            <h1>Chocolate Intelligence 🍫</h1>
+            <p class="subtitle">
+                Ask questions about sales, customers, products, employees,
+                and ingredients using natural language.
+            </p>
+        </div>
+    </header>
+
+
+    <!-- Question Box -->
+    <section class="ask-card">
+
+        <div class="section-label">
+            <span>Ask your business anything</span>
+        </div>
+
+        <form id="questionForm">
+
+            <div class="input-wrapper">
+
+                <textarea
+                    id="question"
+                    name="question"
+                    rows="3"
+                    placeholder="e.g. What are our 10 highest-revenue products?"
+                    required
+                ></textarea>
+
+                <button type="submit" id="askButton">
+                    <span id="buttonText">Ask AI</span>
+                    <span id="buttonLoader" class="loader hidden"></span>
+                </button>
+
+            </div>
+
+        </form>
+
+
+        <!-- Example Questions -->
+        <div class="examples">
+
+            <span class="examples-label">Try asking:</span>
+
+            <button
+                type="button"
+                class="example-btn"
+                data-question="What are our 10 highest-revenue products?"
+            >
+                Top products
+            </button>
+
+            <button
+                type="button"
+                class="example-btn"
+                data-question="Which city generates the most revenue?"
+            >
+                Best city
+            </button>
+
+            <button
+                type="button"
+                class="example-btn"
+                data-question="What is our average order value?"
+            >
+                Average order value
+            </button>
+
+            <button
+                type="button"
+                class="example-btn"
+                data-question="Which ingredient is used by the most products?"
+            >
+                Popular ingredient
+            </button>
+
+        </div>
+
+    </section>
+
+
+    <!-- Error -->
+    <div id="errorBox" class="error-box hidden"></div>
+
+
+    <!-- Results -->
+    <section id="resultsSection" class="results-section hidden">
+
+
+        <!-- AI Explanation -->
+        <div class="result-card explanation-card">
+
+            <div class="card-header">
+                <div>
+                    <p class="card-kicker">AI INSIGHT</p>
+                    <h2>What the data says</h2>
+                </div>
+
+                <div class="ai-badge">
+                    AI
+                </div>
+            </div>
+
+            <div id="explanation" class="explanation">
+            </div>
+
+        </div>
+
+
+        <!-- SQL -->
+        <div class="result-card">
+
+            <div class="card-header">
+                <div>
+                    <p class="card-kicker">GENERATED QUERY</p>
+                    <h2>SQL</h2>
+                </div>
+
+                <button
+                    type="button"
+                    id="copySqlButton"
+                    class="copy-button"
+                >
+                    Copy
+                </button>
+            </div>
+
+            <pre id="sqlOutput" class="sql-output"></pre>
+
+        </div>
+
+
+        <!-- Result Table -->
+        <div class="result-card table-card">
+
+            <div class="card-header">
+
+                <div>
+                    <p class="card-kicker">QUERY RESULT</p>
+                    <h2>Data</h2>
+                </div>
+
+                <span id="rowCount" class="row-count"></span>
+
+            </div>
+
+            <div class="table-wrapper">
+
+                <table id="resultsTable">
+
+                    <thead id="resultsHead">
+                    </thead>
+
+                    <tbody id="resultsBody">
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </div>
+
+    </section>
+
+</div>
+
+
+<script>
+
+    const form = document.getElementById("questionForm");
+    const questionInput = document.getElementById("question");
+
+    const askButton = document.getElementById("askButton");
+    const buttonText = document.getElementById("buttonText");
+    const buttonLoader = document.getElementById("buttonLoader");
+
+    const resultsSection = document.getElementById("resultsSection");
+    const errorBox = document.getElementById("errorBox");
+
+    const explanation = document.getElementById("explanation");
+    const sqlOutput = document.getElementById("sqlOutput");
+
+    const resultsHead = document.getElementById("resultsHead");
+    const resultsBody = document.getElementById("resultsBody");
+
+    const rowCount = document.getElementById("rowCount");
+    const copySqlButton = document.getElementById("copySqlButton");
+
+
+    // --------------------------------------------------
+    // Example Questions
+    // --------------------------------------------------
+
+    document.querySelectorAll(".example-btn").forEach(button => {
+
+        button.addEventListener("click", () => {
+
+            questionInput.value = button.dataset.question;
+
+            questionInput.focus();
+
+        });
+
+    });
+
+
+    // --------------------------------------------------
+    // Ask AI
+    // --------------------------------------------------
+
+    form.addEventListener("submit", async (event) => {
+
+        event.preventDefault();
+
+        const question = questionInput.value.trim();
+
+        if (!question) {
+            return;
+        }
+
+
+        // Reset UI
+
+        errorBox.classList.add("hidden");
+        resultsSection.classList.add("hidden");
+
+        askButton.disabled = true;
+
+        buttonText.textContent = "Thinking...";
+
+        buttonLoader.classList.remove("hidden");
+
+
+        try {
+
+            const response = await fetch("/api/ask", {
+
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                body: JSON.stringify({
+                    question: question
+                })
+
+            });
+
+
+            const data = await response.json();
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    data.error || "Something went wrong."
+                );
+
+            }
+
+
+            // --------------------------------------------------
+            // AI Explanation
+            // --------------------------------------------------
+
+            explanation.textContent = data.explanation || "No explanation available.";
+
+
+            // --------------------------------------------------
+            // SQL
+            // --------------------------------------------------
+
+            sqlOutput.textContent = data.sql || "";
+
+
+            // --------------------------------------------------
+            // Table
+            // --------------------------------------------------
+
+            renderTable(
+                data.columns || [],
+                data.rows || []
+            );
+
+
+            // Show results
+
+            resultsSection.classList.remove("hidden");
+
+
+            // Scroll to results
+
+            resultsSection.scrollIntoView({
+                behavior: "smooth",
+                block: "start"
+            });
+
+
+        } catch (error) {
+
+            errorBox.textContent = error.message;
+
+            errorBox.classList.remove("hidden");
+
+        } finally {
+
+            askButton.disabled = false;
+
+            buttonText.textContent = "Ask AI";
+
+            buttonLoader.classList.add("hidden");
+
+        }
+
+    });
+
+
+    // --------------------------------------------------
+    // Render Table
+    // --------------------------------------------------
+
+    function renderTable(columns, rows) {
+
+        resultsHead.innerHTML = "";
+        resultsBody.innerHTML = "";
+
+
+        // Header
+
+        const headerRow = document.createElement("tr");
+
+        columns.forEach(column => {
+
+            const th = document.createElement("th");
+
+            th.textContent = column;
+
+            headerRow.appendChild(th);
+
+        });
+
+        resultsHead.appendChild(headerRow);
+
+
+        // Body
+
+        rows.forEach(row => {
+
+            const tr = document.createElement("tr");
+
+
+            columns.forEach(column => {
+
+                const td = document.createElement("td");
+
+                const value = row[column];
+
+                if (value === null || value === undefined) {
+
+                    td.textContent = "NULL";
+
+                } else {
+
+                    td.textContent = value;
+
+                }
+
+                tr.appendChild(td);
+
+            });
+
+
+            resultsBody.appendChild(tr);
+
+        });
+
+
+        rowCount.textContent =
+            `${rows.length} row${rows.length === 1 ? "" : "s"}`;
+
+    }
+
+
+    // --------------------------------------------------
+    // Copy SQL
+    // --------------------------------------------------
+
+    copySqlButton.addEventListener("click", async () => {
+
+        const sql = sqlOutput.textContent;
+
+        if (!sql) {
+            return;
+        }
+
+
+        try {
+
+            await navigator.clipboard.writeText(sql);
+
+            copySqlButton.textContent = "Copied!";
+
+            setTimeout(() => {
+
+                copySqlButton.textContent = "Copy";
+
+            }, 1500);
+
+        } catch {
+
+            copySqlButton.textContent = "Failed";
+
+        }
+
+    });
+
+</script>
+
+{% endblock %}
