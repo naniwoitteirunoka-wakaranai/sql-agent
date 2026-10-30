@@ -16,7 +16,7 @@ myven/
 
 # SQLite database
 database.db-wal
-database.db
+
 database.db-shm
 *.sqlite
 *.sqlite3
