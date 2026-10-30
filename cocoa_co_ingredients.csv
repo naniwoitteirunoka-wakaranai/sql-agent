@@ -1,0 +1,51 @@
+id,name,category,unit,cost_per_unit_eur,supplier_name
+1,Cocoa Powder,Cocoa,kg,18.5,Barry Callebaut
+2,Cocoa Butter,Cocoa,kg,24.0,Cargill Cocoa
+3,Dark Chocolate Couverture,Cocoa,kg,16.75,Callebaut
+4,Milk Chocolate Couverture,Cocoa,kg,15.5,Callebaut
+5,White Chocolate Couverture,Cocoa,kg,15.75,Callebaut
+6,Granulated Sugar,Sweetener,kg,1.2,Raffinerie Tirlemontoise
+7,Powdered Sugar,Sweetener,kg,1.5,Raffinerie Tirlemontoise
+8,Whole Milk,Dairy,L,1.1,Belgian Dairy Co
+9,Heavy Cream,Dairy,L,4.8,Belgian Dairy Co
+10,Milk Powder,Dairy,kg,6.9,Milcobel
+11,Vanilla Beans,Flavoring,kg,145.0,Vanille de Madagascar
+12,Vanilla Extract,Flavoring,L,72.0,Nielsen-Massey
+13,Almonds,Nuts,kg,11.5,Mediterranean Nut Traders
+14,Hazelnuts,Nuts,kg,13.8,Piemont Nut House
+15,Pistachios,Nuts,kg,19.5,Sicilian Nut Co
+16,Cashews,Nuts,kg,10.8,Cashew Collective
+17,Walnuts,Nuts,kg,9.9,European Nut Supply
+18,Pecans,Nuts,kg,14.2,Southern Nut Traders
+19,Macadamia Nuts,Nuts,kg,18.75,Premium Nut Imports
+20,Coconut Flakes,Fruit,kg,5.4,Tropical Ingredients
+21,Raspberries,Fruit,kg,9.5,Belgian Berry Farms
+22,Strawberries,Fruit,kg,7.8,Belgian Berry Farms
+23,Cherries,Fruit,kg,8.6,European Fruit Supply
+24,Oranges,Fruit,kg,3.2,Mediterranean Citrus
+25,Mango Puree,Fruit,kg,6.9,Tropical Ingredients
+26,Pear Puree,Fruit,kg,5.8,European Fruit Supply
+27,Coffee Beans,Flavoring,kg,18.0,Brussels Coffee Roasters
+28,Sea Salt,Seasoning,kg,2.8,Atlantic Salt Works
+29,Caramel,Confectionery,kg,7.5,Caramel Works
+30,Praline Paste,Confectionery,kg,12.5,Belgian Praline Co
+31,Nougat,Confectionery,kg,8.9,European Confectionery
+32,Honey,Sweetener,kg,6.4,Belgian Honey Collective
+33,Cinnamon,Spice,kg,9.8,Global Spice Traders
+34,Cardamom,Spice,kg,31.0,Global Spice Traders
+35,Ginger,Spice,kg,7.2,Global Spice Traders
+36,Orange Zest,Fruit,kg,12.0,Mediterranean Citrus
+37,Raspberry Puree,Fruit,kg,10.5,Belgian Berry Farms
+38,Strawberry Puree,Fruit,kg,8.9,Belgian Berry Farms
+39,Cherry Puree,Fruit,kg,9.7,European Fruit Supply
+40,Hazelnut Paste,Nuts,kg,16.5,Piemont Nut House
+41,Almond Paste,Nuts,kg,14.5,Mediterranean Nut Traders
+42,Pistachio Paste,Nuts,kg,27.0,Sicilian Nut Co
+43,Coconut Cream,Fruit,kg,6.8,Tropical Ingredients
+44,Lemon Zest,Fruit,kg,8.5,Mediterranean Citrus
+45,Dried Cranberries,Fruit,kg,6.7,European Fruit Supply
+46,Dried Blueberries,Fruit,kg,13.5,European Fruit Supply
+47,Dried Apricots,Fruit,kg,7.9,European Fruit Supply
+48,Molasses,Sweetener,kg,3.6,European Sweeteners
+49,Maple Syrup,Sweetener,L,12.5,Canadian Maple Supply
+50,Espresso Powder,Flavoring,kg,32.0,Brussels Coffee Roasters
