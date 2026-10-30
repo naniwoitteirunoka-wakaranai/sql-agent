@@ -920,7 +920,6 @@ tbody tr:last-child td {
    Responsive Design
    ========================================================= */
 
-
 /* ---------------------------------------------------------
    Tablet
    --------------------------------------------------------- */
@@ -931,29 +930,28 @@ tbody tr:last-child td {
         padding-top: 45px;
     }
 
-
     .dashboard-header {
         margin-bottom: 28px;
     }
 
-
     .input-wrapper {
         flex-direction: column;
-    }
-
-
-    #askButton {
         width: 100%;
-        min-height: 52px;
     }
-
 
     textarea {
+        width: 100%;
+        display: block;
+
         height: 110px;
         min-height: 110px;
         max-height: 220px;
     }
 
+    #askButton {
+        width: 100%;
+        min-height: 52px;
+    }
 }
 
 
@@ -964,33 +962,33 @@ tbody tr:last-child td {
 @media (max-width: 600px) {
 
     .nav-container {
-
-        width: min(
-            100% - 24px,
-            1180px
-        );
-
+        width: calc(100% - 32px);
         min-height: 62px;
     }
 
 
     .main-content {
+        width: calc(100% - 32px);
 
-        width: calc(100% - 24px);
+        padding-top: 42px;
+        padding-bottom: 65px;
+    }
 
-        padding-top: 35px;
-        padding-bottom: 55px;
+
+    .dashboard-header {
+        margin-bottom: 30px;
     }
 
 
     .dashboard-header h1 {
-
         font-size: 2.25rem;
+        line-height: 1.02;
     }
 
 
     .subtitle {
         font-size: 0.88rem;
+        line-height: 1.65;
     }
 
 
@@ -1000,21 +998,52 @@ tbody tr:last-child td {
 
 
     .ask-card {
-        padding: 17px;
-        border-radius: 17px;
+        width: 100%;
+        padding: 20px;
+        border-radius: 18px;
+    }
+
+
+    .input-wrapper {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+
+    textarea {
+        width: 100%;
+        min-width: 0;
+
+        height: 110px;
+        min-height: 110px;
+        max-height: 220px;
+
+        padding: 15px 16px;
+
+        font-size: 0.92rem;
+        line-height: 1.55;
+
+        display: block;
+    }
+
+
+    #askButton {
+        width: 100%;
+        min-height: 54px;
     }
 
 
     .examples {
-
         align-items: flex-start;
-
         flex-direction: column;
+        width: 100%;
     }
 
 
     .examples-label {
-        margin-bottom: 2px;
+        margin-bottom: 3px;
     }
 
 
@@ -1025,32 +1054,26 @@ tbody tr:last-child td {
 
 
     .card-header {
-
         padding: 16px;
-
         align-items: flex-start;
     }
 
 
     .explanation {
         padding: 17px;
-
         font-size: 0.88rem;
     }
 
 
     .sql-output {
         padding: 17px;
-
         font-size: 0.74rem;
     }
 
 
     .footer {
-
-        width: calc(100% - 24px);
+        width: calc(100% - 32px);
     }
-
 }
 
 
@@ -1060,13 +1083,25 @@ tbody tr:last-child td {
 
 @media (max-width: 380px) {
 
+    .nav-container {
+        width: calc(100% - 28px);
+    }
+
+
+    .main-content {
+        width: calc(100% - 28px);
+
+        padding-top: 34px;
+        padding-bottom: 55px;
+    }
+
+
     .brand-name {
         font-size: 0.9rem;
     }
 
 
     .brand-icon {
-
         width: 34px;
         height: 34px;
     }
@@ -1078,7 +1113,11 @@ tbody tr:last-child td {
 
 
     .ask-card {
-        padding: 14px;
+        padding: 16px;
     }
 
+
+    textarea {
+        padding: 14px 15px;
+    }
 }
