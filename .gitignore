@@ -13,13 +13,6 @@ ENV/
 .env
 .env.*
 
-# SQLite database
-database.db
-database.db-wal
-database.db-shm
-*.sqlite
-*.sqlite3
-
 # OS files
 .DS_Store
 Thumbs.db
