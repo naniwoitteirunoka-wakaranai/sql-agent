@@ -8,14 +8,15 @@ __pycache__/
 venv/
 env/
 ENV/
+myven/
 
 # Environment variables / secrets
 .env
 .env.*
 
 # SQLite database
-database.db
 database.db-wal
+database.db
 database.db-shm
 *.sqlite
 *.sqlite3
