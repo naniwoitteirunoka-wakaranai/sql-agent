@@ -1116,6 +1116,143 @@ tbody tr:last-child td {
         padding: 16px;
     }
 
+   
+/* ==========================================
+   AGENT EXECUTION TRACE
+   ========================================== */
+
+.trace-card {
+    border-color: rgba(214, 154, 85, 0.25);
+}
+
+.execution-trace {
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.trace-step {
+    display: flex;
+    gap: 14px;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.trace-step.trace-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.trace-marker {
+    width: 27px;
+    height: 27px;
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: rgba(127, 200, 154, 0.12);
+    color: #7fc89a;
+    font-size: 1.2rem;
+}
+
+.trace-step-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.trace-step-content strong {
+    display: block;
+    color: var(--cream);
+    font-size: 0.88rem;
+    margin-bottom: 4px;
+}
+
+.trace-step-content p {
+    color: var(--muted);
+    font-size: 0.78rem;
+    line-height: 1.6;
+    margin: 0 0 5px;
+}
+
+.trace-step-status {
+    color: #7fc89a;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.trace-failed .trace-marker {
+    background: rgba(233, 130, 114, 0.12);
+    color: #e98272;
+}
+
+.trace-failed .trace-step-status {
+    color: #e98272;
+}
+
+
+/* ==========================================
+   CONVERSATIONAL FOLLOW-UPS
+   ========================================== */
+
+.followup-content {
+    padding: 20px 22px;
+}
+
+.followup-content > p {
+    color: var(--muted);
+    font-size: 0.85rem;
+    line-height: 1.6;
+    margin-bottom: 16px;
+}
+
+.followup-examples {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px;
+}
+
+.followup-btn {
+    padding: 9px 13px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.025);
+    color: var(--cream-soft);
+    font: inherit;
+    font-size: 0.76rem;
+    cursor: pointer;
+    transition: 0.2s ease;
+}
+
+.followup-btn:hover {
+    background: rgba(184, 117, 51, 0.12);
+    border-color: var(--border-strong);
+    color: var(--gold);
+}
+
+@media (max-width: 600px) {
+
+    .execution-trace {
+        padding: 17px;
+    }
+
+    .followup-content {
+        padding: 17px;
+    }
+
+    .followup-examples {
+        flex-direction: column;
+    }
+
+    .followup-btn {
+        width: 100%;
+        text-align: left;
+    }
+}
+
 
     textarea {
         padding: 14px 15px;
