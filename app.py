@@ -14,9 +14,9 @@ from dotenv import load_dotenv
 from groq import Groq
 
 
-# --------------------------------------------------
-# Configuration
-# --------------------------------------------------
+# ==================================================
+# CONFIGURATION
+# ==================================================
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -30,59 +30,53 @@ COMPRESSED_DB_PATH = BASE_DIR / "database.db.zst"
 groq_api_key = os.getenv("GROQ_API_KEY")
 
 if not groq_api_key:
-    raise RuntimeError(
-        "GROQ_API_KEY is missing. Add it to your .env file."
-    )
+    raise RuntimeError("GROQ_API_KEY is missing.")
 
 client = Groq(api_key=groq_api_key)
 
 MODEL = "openai/gpt-oss-120b"
 
 MAX_SQL_ROWS = 200
+MAX_HISTORY_TURNS = 8
 
 
-# --------------------------------------------------
-# Restore Compressed Database
-# --------------------------------------------------
+# ==================================================
+# DATABASE RESTORATION
+# ==================================================
 
 def ensure_database():
 
     if DATABASE_PATH.exists():
-        print("Test database already exists.")
+        print("Database already exists.")
         return
 
     if not COMPRESSED_DB_PATH.exists():
         raise FileNotFoundError(
-            f"Compressed database not found: {COMPRESSED_DB_PATH}"
+            f"Database not found: {COMPRESSED_DB_PATH}"
         )
 
-    print("Restoring database from compressed file...")
+    print("Restoring compressed database...")
 
     temp_path = DATABASE_PATH.with_suffix(".tmp")
 
     try:
 
         with open(COMPRESSED_DB_PATH, "rb") as source:
-
             with open(temp_path, "wb") as output:
-
                 zstd.ZstdDecompressor().copy_stream(
-                    source,
-                    output
+                    source, output
                 )
 
         connection = sqlite3.connect(temp_path)
 
         try:
-
             result = connection.execute(
                 "PRAGMA integrity_check"
             ).fetchone()
 
             if not result or result[0] != "ok":
-
                 raise sqlite3.DatabaseError(
-                    "Restored database failed integrity check."
+                    "Database integrity check failed."
                 )
 
         finally:
@@ -90,7 +84,7 @@ def ensure_database():
 
         temp_path.replace(DATABASE_PATH)
 
-        print("Database restored and verified successfully!")
+        print("Database restored successfully.")
 
     except Exception:
 
@@ -103,34 +97,32 @@ def ensure_database():
 ensure_database()
 
 
-# --------------------------------------------------
-# Read-Only Database Connection
-# --------------------------------------------------
+# ==================================================
+# READ-ONLY DATABASE CONNECTION
+# ==================================================
 
 def get_db():
 
-    database_uri = DATABASE_PATH.as_uri() + "?mode=ro"
+    uri = DATABASE_PATH.as_uri() + "?mode=ro"
 
     connection = sqlite3.connect(
-        database_uri,
+        uri,
         uri=True,
         timeout=30
     )
 
     connection.row_factory = sqlite3.Row
-
-    # Additional SQLite-level read-only protection
     connection.execute("PRAGMA query_only = ON")
 
     return connection
 
 
-# --------------------------------------------------
-# Database Schema for the AI
-# --------------------------------------------------
+# ==================================================
+# DATABASE SCHEMA
+# ==================================================
 
 DATABASE_SCHEMA = """
-Database: Veloura Chocolates handmade chocolate business
+Database: Veloura Chocolates
 
 TABLE customers
 - id INTEGER PRIMARY KEY
@@ -183,7 +175,7 @@ TABLE product_ingredients
 - ingredient_id INTEGER
 - quantity_required REAL
 
-Relationships:
+RELATIONSHIPS:
 
 customers.id -> orders.customer_id
 orders.id -> order_items.order_id
@@ -193,9 +185,9 @@ ingredients.id -> product_ingredients.ingredient_id
 """
 
 
-# --------------------------------------------------
-# Clean Generated SQL
-# --------------------------------------------------
+# ==================================================
+# SQL CLEANING
+# ==================================================
 
 def clean_sql(sql):
 
@@ -204,7 +196,6 @@ def clean_sql(sql):
 
     sql = sql.strip()
 
-    # Remove Markdown SQL code fences
     sql = re.sub(
         r"^```(?:sql)?\s*",
         "",
@@ -212,55 +203,30 @@ def clean_sql(sql):
         flags=re.IGNORECASE
     )
 
-    sql = re.sub(
-        r"\s*```$",
-        "",
-        sql
-    )
+    sql = re.sub(r"\s*```$", "", sql)
 
     return sql.strip()
 
 
-# --------------------------------------------------
-# SQL Validator
-# --------------------------------------------------
+# ==================================================
+# SQL VALIDATOR
+# ==================================================
 
 def validate_sql(sql):
-    """
-    Validate generated SQL before execution.
-
-    Checks:
-    1. SQL is not empty.
-    2. SQL contains exactly one statement.
-    3. SQL syntax is valid.
-    4. Root statement is a SELECT query.
-    5. SQL does not contain write operations.
-    6. Tables and columns exist in SQLite.
-
-    Returns:
-        (True, "SQL validation successful")
-        (False, "Reason for rejection")
-    """
 
     sql = clean_sql(sql)
 
     if not sql:
-        return False, "Generated SQL is empty."
-
-    # ----------------------------------------------
-    # 1. Parse SQL using SQLGlot
-    # ----------------------------------------------
+        return False, "SQL query is empty."
 
     try:
 
-        statements = sqlglot.parse(
-            sql,
-            read="sqlite"
-        )
-
         statements = [
             statement
-            for statement in statements
+            for statement in sqlglot.parse(
+                sql,
+                read="sqlite"
+            )
             if statement is not None
         ]
 
@@ -268,31 +234,13 @@ def validate_sql(sql):
 
         return False, f"SQL syntax error: {error}"
 
-    # ----------------------------------------------
-    # 2. Reject multiple SQL statements
-    # ----------------------------------------------
-
     if len(statements) != 1:
+        return False, "Multiple SQL statements are not allowed."
 
-        return False, (
-            "Multiple SQL statements are not allowed."
-        )
+    parsed = statements[0]
 
-    parsed_sql = statements[0]
-
-    # ----------------------------------------------
-    # 3. Only allow SELECT-style queries
-    # ----------------------------------------------
-
-    if not isinstance(parsed_sql, exp.Query):
-
-        return False, (
-            "Only SELECT queries are permitted."
-        )
-
-    # ----------------------------------------------
-    # 4. Reject dangerous SQL operations
-    # ----------------------------------------------
+    if not isinstance(parsed, exp.Query):
+        return False, "Only SELECT queries are permitted."
 
     forbidden_nodes = (
         exp.Insert,
@@ -304,18 +252,10 @@ def validate_sql(sql):
         exp.Command,
     )
 
-    for node in parsed_sql.walk():
+    for node in parsed.walk():
 
         if isinstance(node, forbidden_nodes):
-
-            return False, (
-                f"Forbidden SQL operation detected: "
-                f"{type(node).__name__}"
-            )
-
-    # ----------------------------------------------
-    # 5. Validate against actual SQLite schema
-    # ----------------------------------------------
+            return False, "Forbidden SQL operation detected."
 
     connection = None
 
@@ -323,18 +263,13 @@ def validate_sql(sql):
 
         connection = get_db()
 
-        # EXPLAIN QUERY PLAN checks whether SQLite
-        # can prepare the query without executing it.
-
         connection.execute(
             "EXPLAIN QUERY PLAN " + sql
         )
 
     except sqlite3.Error as error:
 
-        return False, (
-            f"Database validation failed: {str(error)}"
-        )
+        return False, f"Database validation failed: {error}"
 
     finally:
 
@@ -344,17 +279,11 @@ def validate_sql(sql):
     return True, "SQL validation successful."
 
 
-# --------------------------------------------------
-# SQLite Authorizer
-# --------------------------------------------------
+# ==================================================
+# SQLITE AUTHORZER
+# ==================================================
 
 def sqlite_authorizer(action, arg1, arg2, database, trigger):
-    """
-    SQLite-level security boundary.
-
-    Denies database modifications even if a query
-    somehow passes the earlier validation layer.
-    """
 
     denied_actions = {
 
@@ -391,34 +320,85 @@ def sqlite_authorizer(action, arg1, arg2, database, trigger):
     if action in denied_actions:
         return sqlite3.SQLITE_DENY
 
-    # Block potentially dangerous extension/file functions.
     if action == sqlite3.SQLITE_FUNCTION:
 
-        function_name = (
-            arg2 or arg1 or ""
-        ).lower()
+        function_name = (arg2 or arg1 or "").lower()
 
-        if function_name in {
-            "load_extension",
-            "writefile",
-        }:
+        if function_name in {"load_extension", "writefile"}:
             return sqlite3.SQLITE_DENY
 
     return sqlite3.SQLITE_OK
 
 
-# --------------------------------------------------
-# Generate SQL
-# --------------------------------------------------
+# ==================================================
+# CONVERSATION CONTEXT
+# ==================================================
 
-def generate_sql(question, previous_sql=None, error_message=None):
+def clean_history(history):
+
+    if not isinstance(history, list):
+        return []
+
+    cleaned = []
+
+    for item in history[-MAX_HISTORY_TURNS:]:
+
+        if not isinstance(item, dict):
+            continue
+
+        question = item.get("question", "")
+        answer = item.get("answer", "")
+
+        if not isinstance(question, str):
+            continue
+
+        if not isinstance(answer, str):
+            continue
+
+        cleaned.append({
+            "question": question[:1000],
+            "answer": answer[:2000]
+        })
+
+    return cleaned
+
+
+def format_history(history):
+
+    if not history:
+        return "No previous conversation."
+
+    formatted = []
+
+    for item in history:
+
+        formatted.append(
+            f"Previous user question: {item['question']}\n"
+            f"Previous assistant answer: {item['answer']}"
+        )
+
+    return "\n\n".join(formatted)
+
+
+# ==================================================
+# GENERATE SQL
+# ==================================================
+
+def generate_sql(
+    question,
+    history=None,
+    previous_sql=None,
+    error_message=None
+):
+
+    history_context = format_history(history or [])
 
     correction_context = ""
 
     if previous_sql and error_message:
 
         correction_context = f"""
-The previous SQL query failed validation.
+Your previous SQL was invalid.
 
 Previous SQL:
 {previous_sql}
@@ -426,33 +406,37 @@ Previous SQL:
 Validation error:
 {error_message}
 
-Generate a corrected query that fixes the error.
-Do not repeat the same mistake.
+Correct the SQL using the actual schema.
 """
 
     system_prompt = f"""
-You are the SQL analyst for Veloura Chocolates,
-a handmade chocolate company.
+You are the SQL analyst for Veloura Chocolates.
 
 Convert business questions into SQLite SQL queries.
 
 DATABASE SCHEMA:
 {DATABASE_SCHEMA}
 
-Rules:
+PREVIOUS CONVERSATION:
+{history_context}
+
+RULES:
 
 1. Return ONLY SQL.
 2. Generate only SELECT queries.
 3. Never modify the database.
 4. Use SQLite-compatible SQL.
 5. Use JOINs when necessary.
-6. Use clear column aliases for calculations.
+6. Use clear column aliases.
 7. Calculate revenue using quantity * unit_price.
 8. For product revenue, join orders, order_items and products.
-9. For ingredient cost, use product_ingredients and ingredients.
-10. Do not invent tables or columns.
-11. Return only SQL without explanations.
-12. Do not generate multiple SQL statements.
+9. For ingredient costs, use product_ingredients and ingredients.
+10. Never invent tables or columns.
+11. Do not generate multiple SQL statements.
+12. Use previous conversation context to resolve follow-up questions.
+13. If the user refers to "it", "that city", "second one",
+    or similar phrases, interpret them using conversation history.
+14. Return SQL only, without Markdown or explanations.
 
 {correction_context}
 """
@@ -476,32 +460,32 @@ Rules:
         max_tokens=1000
     )
 
-    sql = response.choices[0].message.content
+    return clean_sql(
+        response.choices[0].message.content
+    )
 
-    return clean_sql(sql)
 
-
-# --------------------------------------------------
-# Execute SQL
-# --------------------------------------------------
+# ==================================================
+# EXECUTE SQL
+# ==================================================
 
 def execute_sql(sql):
 
-    # Validate before execution
-    is_valid, validation_message = validate_sql(sql)
+    valid, message = validate_sql(sql)
 
-    if not is_valid:
-
-        raise ValueError(validation_message)
+    if not valid:
+        raise ValueError(message)
 
     connection = get_db()
 
     try:
 
-        # Install SQLite authorizer
         connection.set_authorizer(sqlite_authorizer)
 
         cursor = connection.execute(sql)
+
+        if cursor.description is None:
+            raise ValueError("Query did not return a result set.")
 
         rows = cursor.fetchmany(MAX_SQL_ROWS)
 
@@ -510,50 +494,54 @@ def execute_sql(sql):
             for description in cursor.description
         ]
 
-        data = [
-            dict(row)
-            for row in rows
-        ]
+        data = [dict(row) for row in rows]
 
         return columns, data
 
     finally:
-
         connection.close()
 
 
-# --------------------------------------------------
-# Explain Results
-# --------------------------------------------------
+# ==================================================
+# EXPLAIN RESULTS
+# ==================================================
 
-def explain_result(question, sql, columns, rows):
-
-    result_data = {
-        "columns": columns,
-        "rows": rows
-    }
+def explain_result(
+    question,
+    sql,
+    columns,
+    rows,
+    history=None
+):
 
     prompt = f"""
 You are a business analyst for Veloura Chocolates.
 
-The user asked:
+Previous conversation:
+{format_history(history or [])}
+
+Current user question:
 {question}
 
-The SQL query used was:
+SQL query:
 {sql}
 
-The query returned:
-{json.dumps(result_data, default=str)}
+Actual database results:
+{json.dumps({
+    "columns": columns,
+    "rows": rows
+}, default=str)}
 
-Explain the result in concise business language.
+Explain the results in concise business language.
 
 Rules:
 - Focus on actual results.
 - Mention important numbers.
 - Give useful business insights.
 - Do not invent information.
-- Do not repeat the SQL query.
-- Keep the explanation to 2-4 sentences.
+- Do not repeat SQL.
+- Keep the answer to 2-4 sentences.
+- Use previous conversation only when relevant.
 """
 
     response = client.chat.completions.create(
@@ -578,85 +566,149 @@ Rules:
     return response.choices[0].message.content.strip()
 
 
-# --------------------------------------------------
-# Generate, Validate and Execute
-# --------------------------------------------------
+# ==================================================
+# AGENT WORKFLOW
+# ==================================================
 
-def process_question(question):
-    """
-    Main SQL agent workflow.
+def process_question(question, history):
 
-    Attempts:
-    1. Generate SQL.
-    2. Validate SQL.
-    3. If invalid, ask the LLM to correct it once.
-    4. Execute validated SQL.
-    """
+    trace = []
+
+    def add_step(name, detail, status="completed"):
+
+        trace.append({
+            "name": name,
+            "detail": detail,
+            "status": status
+        })
+
+    add_step(
+        "Understanding request",
+        "Processing the business question and conversation context."
+    )
 
     previous_sql = None
     validation_error = None
+    sql = None
+    columns = None
+    rows = None
 
     for attempt in range(2):
 
-        # Generate SQL
+        add_step(
+            "Generating SQL",
+            "Groq is generating a SQLite query."
+            if attempt == 0 else
+            "Groq is correcting the previous SQL query."
+        )
+
         sql = generate_sql(
             question,
+            history,
             previous_sql,
             validation_error
         )
 
-        # Validate SQL
-        is_valid, validation_message = validate_sql(sql)
+        add_step(
+            "Validating SQL",
+            "Checking SQL syntax, query type and database compatibility."
+        )
 
-        if not is_valid:
+        valid, validation_message = validate_sql(sql)
 
-            app.logger.warning(
-                "SQL validation failed (attempt %s): %s",
-                attempt + 1,
-                validation_message
+        if not valid:
+
+            add_step(
+                "SQL validation",
+                validation_message,
+                "failed"
             )
 
             previous_sql = sql
             validation_error = validation_message
 
+            if attempt == 0:
+
+                add_step(
+                    "Self-correction",
+                    "Sending the validation error back to Groq for correction."
+                )
+
             continue
 
-        # Execute SQL
+        add_step(
+            "SQL validation",
+            "Query passed validation. Only read operations are permitted."
+        )
+
         try:
+
+            add_step(
+                "Database execution",
+                "Executing the validated query against SQLite."
+            )
 
             columns, rows = execute_sql(sql)
 
-            return sql, columns, rows
+            add_step(
+                "Database execution",
+                f"Query completed successfully. Returned {len(rows)} rows."
+            )
 
-        except sqlite3.Error as error:
+            break
 
-            app.logger.warning(
-                "SQL execution failed (attempt %s): %s",
-                attempt + 1,
-                error
+        except (sqlite3.Error, ValueError) as error:
+
+            add_step(
+                "Database execution",
+                str(error),
+                "failed"
             )
 
             previous_sql = sql
             validation_error = str(error)
 
-        except ValueError as error:
+            if attempt == 0:
 
-            previous_sql = sql
-            validation_error = str(error)
+                add_step(
+                    "Self-correction",
+                    "Attempting to correct the query using the execution error."
+                )
 
-    raise ValueError(
-        "The AI could not generate a valid SQL query "
-        f"after two attempts. Last error: {validation_error}"
+    if columns is None:
+
+        raise ValueError(
+            "Unable to generate a valid query after two attempts. "
+            f"Last error: {validation_error}"
+        )
+
+    add_step(
+        "Generating business insight",
+        "Groq is interpreting the database results."
     )
 
+    explanation = explain_result(
+        question,
+        sql,
+        columns,
+        rows,
+        history
+    )
 
-# --------------------------------------------------
-# Routes
-# --------------------------------------------------
+    add_step(
+        "Completed",
+        "Business explanation generated successfully."
+    )
+
+    return sql, columns, rows, explanation, trace
+
+
+# ==================================================
+# ROUTES
+# ==================================================
 
 @app.route("/")
 def dashboard():
-
     return render_template("dashboard.html")
 
 
@@ -667,8 +719,7 @@ def ask_question():
 
         data = request.get_json(silent=True)
 
-        if not data:
-
+        if not isinstance(data, dict):
             return jsonify({
                 "error": "No request data provided."
             }), 400
@@ -676,7 +727,6 @@ def ask_question():
         question = data.get("question", "")
 
         if not isinstance(question, str):
-
             return jsonify({
                 "error": "Question must be text."
             }), 400
@@ -684,45 +734,32 @@ def ask_question():
         question = question.strip()
 
         if not question:
-
             return jsonify({
                 "error": "Please enter a question."
             }), 400
 
         if len(question) > 1000:
-
             return jsonify({
-                "error": "Question is too long. Please keep it under 1000 characters."
+                "error": "Question must be under 1000 characters."
             }), 400
 
-        # ------------------------------------------
-        # Generate, validate and execute SQL
-        # ------------------------------------------
+        history = clean_history(
+            data.get("history", [])
+        )
 
-        sql, columns, rows = process_question(question)
-
-        # ------------------------------------------
-        # Explain results
-        # ------------------------------------------
-
-        explanation = explain_result(
+        sql, columns, rows, explanation, trace = process_question(
             question,
-            sql,
-            columns,
-            rows
+            history
         )
 
         return jsonify({
 
             "question": question,
-
             "sql": sql,
-
             "columns": columns,
-
             "rows": rows,
-
-            "explanation": explanation
+            "explanation": explanation,
+            "trace": trace
 
         })
 
@@ -732,28 +769,18 @@ def ask_question():
             "error": str(error)
         }), 400
 
-    except sqlite3.Error as error:
+    except Exception:
 
-        app.logger.exception("Database error")
-
-        return jsonify({
-            "error": f"Database error: {str(error)}"
-        }), 500
-
-    except Exception as error:
-
-        app.logger.exception(
-            "Question processing failed"
-        )
+        app.logger.exception("Question processing failed")
 
         return jsonify({
             "error": "Something went wrong while processing your question."
         }), 500
 
 
-# --------------------------------------------------
-# Run Application
-# --------------------------------------------------
+# ==================================================
+# RUN APPLICATION
+# ==================================================
 
 if __name__ == "__main__":
 
