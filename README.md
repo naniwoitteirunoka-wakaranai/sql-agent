@@ -73,7 +73,7 @@ The application uses Flask as its central orchestration layer, coordinating the 
 
 ```mermaid
 flowchart TD
-    A(["👤 User asks a question"]) --> B["Frontend Dashboard<br/>HTML, CSS, JavaScript"]
+    A(["User asks a question"]) --> B["Frontend Dashboard<br/>HTML, CSS, JavaScript"]
     B --> C["Flask Backend<br/>Orchestration Layer"]
 
     C --> D["Load Conversation History"]
