@@ -69,46 +69,57 @@ The system uses a Large Language Model (LLM) to translate natural language quest
 
 ## 🏗️ System Architecture
 
-The application follows a simple AI-agent workflow:
+The application uses Flask as its central orchestration layer, coordinating the LLM, SQL validator, SQLite database, and frontend.
 
-```text
-        User Question
-              |
-              v
-     Flask Backend
-              |
-              v
-      Groq LLM API
-              |
-              v
-      SQL Generation
-              |
-              v
-       SQL Validator
-              |
-       +------+------+
-       |             |
-     Valid         Invalid
-       |             |
-       v             v
-  SQLite Query   AI Correction
-   Execution        |
-       |             |
-       |<------------+
-       v
-   Query Results
-       |
-       v
-   Groq LLM API
-       |
-       v
-  Business Insights
-       |
-       v
- Interactive Dashboard
+```mermaid
+flowchart TD
+    A(["👤 User asks a question"]) --> B["Frontend Dashboard<br/>HTML, CSS, JavaScript"]
+    B --> C["Flask Backend<br/>Orchestration Layer"]
+
+    C --> D["Load Conversation History"]
+    D --> E["Groq LLM API<br/>SQL Generation"]
+    E --> F["Generated SQL Query"]
+
+    F --> G["SQLGlot Validator<br/>Syntax and Safety Checks"]
+
+    G --> H{"Is SQL valid?"}
+
+    H -->|No| I["Send Error Feedback to Groq"]
+    I --> E
+
+    H -->|Yes| J["Read-Only SQLite Execution"]
+
+    J --> K{"Execution Successful?"}
+
+    K -->|No| I
+    K -->|Yes| L["Query Results"]
+
+    L --> M["Groq LLM API<br/>Business Insight Generation"]
+
+    M --> N["Natural Language Explanation"]
+
+    N --> O["Return Results to Dashboard"]
+
+    O --> P["Display SQL, Data<br/>and AI Insights"]
+
+    C -.-> Q["Server-Sent Events (SSE)<br/>Live Execution Trace"]
+    Q -.-> B
+
+    B <--> R["Conversation Memory<br/>Latest 8 Turns"]
 ```
 
----
+### Workflow Overview
+
+1. **User Input:** The user submits a business question through the dashboard.
+2. **Orchestration:** Flask receives the request and retrieves recent conversation context.
+3. **SQL Generation:** Groq generates an SQL query based on the user's question.
+4. **SQL Validation:** SQLGlot checks the generated query for syntax and safety.
+5. **Self-Correction:** Invalid queries or execution errors are sent back to Groq for correction, with a limited retry.
+6. **Database Execution:** Valid queries are executed against SQLite using read-only access.
+7. **Insight Generation:** Groq interprets the query results and generates a natural-language explanation.
+8. **Live Updates:** SSE streams execution progress to the frontend.
+9. **Result Presentation:** The dashboard displays the generated SQL, database results, and AI-generated insights.
+10. **Conversation Memory:** Recent interactions are retained to support contextual follow-up questions.
 
 ## 🗄️ Database Structure
 
