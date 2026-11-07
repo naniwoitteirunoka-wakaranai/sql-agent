@@ -1254,6 +1254,198 @@ tbody tr:last-child td {
 }
 
 
+/* ==========================================
+   PREMIUM AGENT EXECUTION TRACE
+   ========================================== */
+
+.trace-card {
+    border: 1px solid rgba(214, 154, 85, 0.25);
+    background:
+        radial-gradient(
+            circle at top right,
+            rgba(184, 117, 51, 0.09),
+            transparent 35%
+        ),
+        linear-gradient(145deg, #211710, #17100d);
+}
+
+.trace-card .card-header {
+    padding: 22px 25px;
+}
+
+#traceStatus {
+    padding: 6px 12px;
+    border: 1px solid rgba(127, 200, 154, 0.2);
+    border-radius: 999px;
+    background: rgba(127, 200, 154, 0.08);
+    color: #8bd4a4;
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+}
+
+.execution-trace {
+    padding: 25px 28px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.trace-step {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding-bottom: 25px;
+
+    opacity: 0;
+    transform: translateY(9px);
+
+    transition:
+        opacity 0.35s ease,
+        transform 0.35s ease;
+}
+
+.trace-step:last-child {
+    padding-bottom: 0;
+}
+
+.trace-step.trace-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Timeline connector */
+
+.trace-step:not(:last-child)::after {
+    content: "";
+    position: absolute;
+
+    left: 15px;
+    top: 34px;
+    bottom: 0;
+
+    width: 1px;
+
+    background: linear-gradient(
+        to bottom,
+        rgba(127, 200, 154, 0.35),
+        rgba(214, 154, 85, 0.12)
+    );
+}
+
+/* Step icon */
+
+.trace-marker {
+    position: relative;
+    z-index: 1;
+
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+
+    display: grid;
+    place-items: center;
+
+    border-radius: 50%;
+
+    background: rgba(127, 200, 154, 0.12);
+    border: 1px solid rgba(127, 200, 154, 0.3);
+
+    color: #8bd4a4;
+    font-size: 0.85rem;
+    font-weight: 800;
+
+    box-shadow: 0 0 16px rgba(127, 200, 154, 0.07);
+}
+
+/* Step content */
+
+.trace-step-content {
+    flex: 1;
+    min-width: 0;
+    padding-top: 1px;
+}
+
+.trace-step-content strong {
+    display: block;
+    margin-bottom: 4px;
+
+    color: #f5eee8;
+    font-size: 0.9rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.trace-step-content p {
+    margin: 0 0 7px;
+
+    color: #a9998e;
+    font-size: 0.78rem;
+    line-height: 1.6;
+}
+
+.trace-step-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+
+    color: #8bd4a4;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+}
+
+/* Failed steps */
+
+.trace-failed .trace-marker {
+    background: rgba(233, 130, 114, 0.12);
+    border-color: rgba(233, 130, 114, 0.35);
+    color: #e98272;
+}
+
+.trace-failed .trace-step-status {
+    color: #e98272;
+}
+
+.trace-failed .trace-step-content strong {
+    color: #f0aaa0;
+}
+
+/* Responsive */
+
+@media (max-width: 600px) {
+
+    .execution-trace {
+        padding: 20px;
+    }
+
+    .trace-step {
+        gap: 12px;
+        padding-bottom: 22px;
+    }
+
+    .trace-marker {
+        width: 29px;
+        height: 29px;
+    }
+
+    .trace-step:not(:last-child)::after {
+        left: 13px;
+        top: 31px;
+    }
+
+    .trace-step-content strong {
+        font-size: 0.84rem;
+    }
+
+    .trace-step-content p {
+        font-size: 0.74rem;
+    }
+}
+
     textarea {
         padding: 14px 15px;
     }
