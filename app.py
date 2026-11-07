@@ -6,6 +6,9 @@ import re
 from pathlib import Path
 
 import zstandard as zstd
+import sqlglot
+from sqlglot import exp
+
 from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
 from groq import Groq
@@ -21,7 +24,6 @@ load_dotenv(BASE_DIR / ".env")
 
 app = Flask(__name__)
 
-# Use a separate database for compressed database testing
 DATABASE_PATH = BASE_DIR / "database.db"
 COMPRESSED_DB_PATH = BASE_DIR / "database.db.zst"
 
@@ -36,16 +38,14 @@ client = Groq(api_key=groq_api_key)
 
 MODEL = "openai/gpt-oss-120b"
 
+MAX_SQL_ROWS = 200
+
 
 # --------------------------------------------------
 # Restore Compressed Database
 # --------------------------------------------------
 
 def ensure_database():
-    """
-    Restore the compressed database if the test database
-    does not already exist.
-    """
 
     if DATABASE_PATH.exists():
         print("Test database already exists.")
@@ -61,20 +61,30 @@ def ensure_database():
     temp_path = DATABASE_PATH.with_suffix(".tmp")
 
     try:
-        with open(COMPRESSED_DB_PATH, "rb") as source:
-            with open(temp_path, "wb") as output:
-                zstd.ZstdDecompressor().copy_stream(source, output)
 
-        # Verify that the restored file is a valid SQLite database
+        with open(COMPRESSED_DB_PATH, "rb") as source:
+
+            with open(temp_path, "wb") as output:
+
+                zstd.ZstdDecompressor().copy_stream(
+                    source,
+                    output
+                )
+
         connection = sqlite3.connect(temp_path)
 
         try:
-            result = connection.execute("PRAGMA integrity_check").fetchone()
+
+            result = connection.execute(
+                "PRAGMA integrity_check"
+            ).fetchone()
 
             if not result or result[0] != "ok":
+
                 raise sqlite3.DatabaseError(
                     "Restored database failed integrity check."
                 )
+
         finally:
             connection.close()
 
@@ -83,22 +93,35 @@ def ensure_database():
         print("Database restored and verified successfully!")
 
     except Exception:
+
         if temp_path.exists():
             temp_path.unlink()
+
         raise
 
 
-# Restore before starting the application
 ensure_database()
 
 
 # --------------------------------------------------
-# Database
+# Read-Only Database Connection
 # --------------------------------------------------
 
 def get_db():
-    connection = sqlite3.connect(DATABASE_PATH)
+
+    database_uri = DATABASE_PATH.as_uri() + "?mode=ro"
+
+    connection = sqlite3.connect(
+        database_uri,
+        uri=True,
+        timeout=30
+    )
+
     connection.row_factory = sqlite3.Row
+
+    # Additional SQLite-level read-only protection
+    connection.execute("PRAGMA query_only = ON")
+
     return connection
 
 
@@ -171,58 +194,241 @@ ingredients.id -> product_ingredients.ingredient_id
 
 
 # --------------------------------------------------
-# SQL Safety
+# Clean Generated SQL
 # --------------------------------------------------
 
 def clean_sql(sql):
+
+    if not isinstance(sql, str):
+        return ""
+
     sql = sql.strip()
 
+    # Remove Markdown SQL code fences
     sql = re.sub(
-        r"^```sql\s*", "", sql, flags=re.IGNORECASE
+        r"^```(?:sql)?\s*",
+        "",
+        sql,
+        flags=re.IGNORECASE
     )
 
-    sql = re.sub(r"^```\s*", "", sql)
-    sql = re.sub(r"\s*```$", "", sql)
+    sql = re.sub(
+        r"\s*```$",
+        "",
+        sql
+    )
 
     return sql.strip()
 
 
-def is_safe_sql(sql):
+# --------------------------------------------------
+# SQL Validator
+# --------------------------------------------------
+
+def validate_sql(sql):
     """
-    Allow only a single read-only SELECT statement.
+    Validate generated SQL before execution.
+
+    Checks:
+    1. SQL is not empty.
+    2. SQL contains exactly one statement.
+    3. SQL syntax is valid.
+    4. Root statement is a SELECT query.
+    5. SQL does not contain write operations.
+    6. Tables and columns exist in SQLite.
+
+    Returns:
+        (True, "SQL validation successful")
+        (False, "Reason for rejection")
     """
 
     sql = clean_sql(sql)
 
     if not sql:
-        return False
+        return False, "Generated SQL is empty."
 
-    normalized = sql.lower().strip()
+    # ----------------------------------------------
+    # 1. Parse SQL using SQLGlot
+    # ----------------------------------------------
 
-    if not normalized.startswith("select"):
-        return False
+    try:
 
-    forbidden_keywords = [
-        "insert", "update", "delete", "drop",
-        "alter", "create", "replace", "attach",
-        "detach", "pragma", "vacuum", "reindex"
-    ]
+        statements = sqlglot.parse(
+            sql,
+            read="sqlite"
+        )
 
-    if ";" in normalized.rstrip(";"):
-        return False
+        statements = [
+            statement
+            for statement in statements
+            if statement is not None
+        ]
 
-    for keyword in forbidden_keywords:
-        if re.search(r"\b" + keyword + r"\b", normalized):
-            return False
+    except sqlglot.errors.ParseError as error:
 
-    return True
+        return False, f"SQL syntax error: {error}"
+
+    # ----------------------------------------------
+    # 2. Reject multiple SQL statements
+    # ----------------------------------------------
+
+    if len(statements) != 1:
+
+        return False, (
+            "Multiple SQL statements are not allowed."
+        )
+
+    parsed_sql = statements[0]
+
+    # ----------------------------------------------
+    # 3. Only allow SELECT-style queries
+    # ----------------------------------------------
+
+    if not isinstance(parsed_sql, exp.Query):
+
+        return False, (
+            "Only SELECT queries are permitted."
+        )
+
+    # ----------------------------------------------
+    # 4. Reject dangerous SQL operations
+    # ----------------------------------------------
+
+    forbidden_nodes = (
+        exp.Insert,
+        exp.Update,
+        exp.Delete,
+        exp.Drop,
+        exp.Create,
+        exp.Alter,
+        exp.Command,
+    )
+
+    for node in parsed_sql.walk():
+
+        if isinstance(node, forbidden_nodes):
+
+            return False, (
+                f"Forbidden SQL operation detected: "
+                f"{type(node).__name__}"
+            )
+
+    # ----------------------------------------------
+    # 5. Validate against actual SQLite schema
+    # ----------------------------------------------
+
+    connection = None
+
+    try:
+
+        connection = get_db()
+
+        # EXPLAIN QUERY PLAN checks whether SQLite
+        # can prepare the query without executing it.
+
+        connection.execute(
+            "EXPLAIN QUERY PLAN " + sql
+        )
+
+    except sqlite3.Error as error:
+
+        return False, (
+            f"Database validation failed: {str(error)}"
+        )
+
+    finally:
+
+        if connection:
+            connection.close()
+
+    return True, "SQL validation successful."
+
+
+# --------------------------------------------------
+# SQLite Authorizer
+# --------------------------------------------------
+
+def sqlite_authorizer(action, arg1, arg2, database, trigger):
+    """
+    SQLite-level security boundary.
+
+    Denies database modifications even if a query
+    somehow passes the earlier validation layer.
+    """
+
+    denied_actions = {
+
+        sqlite3.SQLITE_INSERT,
+        sqlite3.SQLITE_UPDATE,
+        sqlite3.SQLITE_DELETE,
+
+        sqlite3.SQLITE_CREATE_INDEX,
+        sqlite3.SQLITE_CREATE_TABLE,
+        sqlite3.SQLITE_CREATE_TEMP_INDEX,
+        sqlite3.SQLITE_CREATE_TEMP_TABLE,
+        sqlite3.SQLITE_CREATE_TEMP_TRIGGER,
+        sqlite3.SQLITE_CREATE_TEMP_VIEW,
+        sqlite3.SQLITE_CREATE_TRIGGER,
+        sqlite3.SQLITE_CREATE_VIEW,
+
+        sqlite3.SQLITE_DROP_INDEX,
+        sqlite3.SQLITE_DROP_TABLE,
+        sqlite3.SQLITE_DROP_TEMP_INDEX,
+        sqlite3.SQLITE_DROP_TEMP_TABLE,
+        sqlite3.SQLITE_DROP_TEMP_TRIGGER,
+        sqlite3.SQLITE_DROP_TEMP_VIEW,
+        sqlite3.SQLITE_DROP_TRIGGER,
+        sqlite3.SQLITE_DROP_VIEW,
+
+        sqlite3.SQLITE_ALTER_TABLE,
+        sqlite3.SQLITE_ATTACH,
+        sqlite3.SQLITE_DETACH,
+        sqlite3.SQLITE_TRANSACTION,
+        sqlite3.SQLITE_SAVEPOINT,
+        sqlite3.SQLITE_PRAGMA,
+    }
+
+    if action in denied_actions:
+        return sqlite3.SQLITE_DENY
+
+    # Block potentially dangerous extension/file functions.
+    if action == sqlite3.SQLITE_FUNCTION:
+
+        function_name = (
+            arg2 or arg1 or ""
+        ).lower()
+
+        if function_name in {
+            "load_extension",
+            "writefile",
+        }:
+            return sqlite3.SQLITE_DENY
+
+    return sqlite3.SQLITE_OK
 
 
 # --------------------------------------------------
 # Generate SQL
 # --------------------------------------------------
 
-def generate_sql(question):
+def generate_sql(question, previous_sql=None, error_message=None):
+
+    correction_context = ""
+
+    if previous_sql and error_message:
+
+        correction_context = f"""
+The previous SQL query failed validation.
+
+Previous SQL:
+{previous_sql}
+
+Validation error:
+{error_message}
+
+Generate a corrected query that fixes the error.
+Do not repeat the same mistake.
+"""
 
     system_prompt = f"""
 You are the SQL analyst for Veloura Chocolates,
@@ -246,10 +452,15 @@ Rules:
 9. For ingredient cost, use product_ingredients and ingredients.
 10. Do not invent tables or columns.
 11. Return only SQL without explanations.
+12. Do not generate multiple SQL statements.
+
+{correction_context}
 """
 
     response = client.chat.completions.create(
+
         model=MODEL,
+
         messages=[
             {
                 "role": "system",
@@ -260,6 +471,7 @@ Rules:
                 "content": question
             }
         ],
+
         temperature=0,
         max_tokens=1000
     )
@@ -275,26 +487,38 @@ Rules:
 
 def execute_sql(sql):
 
-    if not is_safe_sql(sql):
-        raise ValueError("Unsafe SQL query rejected.")
+    # Validate before execution
+    is_valid, validation_message = validate_sql(sql)
+
+    if not is_valid:
+
+        raise ValueError(validation_message)
 
     connection = get_db()
 
     try:
+
+        # Install SQLite authorizer
+        connection.set_authorizer(sqlite_authorizer)
+
         cursor = connection.execute(sql)
 
-        rows = cursor.fetchmany(200)
+        rows = cursor.fetchmany(MAX_SQL_ROWS)
 
         columns = [
             description[0]
             for description in cursor.description
         ]
 
-        data = [dict(row) for row in rows]
+        data = [
+            dict(row)
+            for row in rows
+        ]
 
         return columns, data
 
     finally:
+
         connection.close()
 
 
@@ -333,7 +557,9 @@ Rules:
 """
 
     response = client.chat.completions.create(
+
         model=MODEL,
+
         messages=[
             {
                 "role": "system",
@@ -344,6 +570,7 @@ Rules:
                 "content": prompt
             }
         ],
+
         temperature=0.2,
         max_tokens=400
     )
@@ -352,11 +579,84 @@ Rules:
 
 
 # --------------------------------------------------
+# Generate, Validate and Execute
+# --------------------------------------------------
+
+def process_question(question):
+    """
+    Main SQL agent workflow.
+
+    Attempts:
+    1. Generate SQL.
+    2. Validate SQL.
+    3. If invalid, ask the LLM to correct it once.
+    4. Execute validated SQL.
+    """
+
+    previous_sql = None
+    validation_error = None
+
+    for attempt in range(2):
+
+        # Generate SQL
+        sql = generate_sql(
+            question,
+            previous_sql,
+            validation_error
+        )
+
+        # Validate SQL
+        is_valid, validation_message = validate_sql(sql)
+
+        if not is_valid:
+
+            app.logger.warning(
+                "SQL validation failed (attempt %s): %s",
+                attempt + 1,
+                validation_message
+            )
+
+            previous_sql = sql
+            validation_error = validation_message
+
+            continue
+
+        # Execute SQL
+        try:
+
+            columns, rows = execute_sql(sql)
+
+            return sql, columns, rows
+
+        except sqlite3.Error as error:
+
+            app.logger.warning(
+                "SQL execution failed (attempt %s): %s",
+                attempt + 1,
+                error
+            )
+
+            previous_sql = sql
+            validation_error = str(error)
+
+        except ValueError as error:
+
+            previous_sql = sql
+            validation_error = str(error)
+
+    raise ValueError(
+        "The AI could not generate a valid SQL query "
+        f"after two attempts. Last error: {validation_error}"
+    )
+
+
+# --------------------------------------------------
 # Routes
 # --------------------------------------------------
 
 @app.route("/")
 def dashboard():
+
     return render_template("dashboard.html")
 
 
@@ -364,34 +664,47 @@ def dashboard():
 def ask_question():
 
     try:
+
         data = request.get_json(silent=True)
 
         if not data:
+
             return jsonify({
                 "error": "No request data provided."
             }), 400
 
-        question = data.get("question", "").strip()
+        question = data.get("question", "")
+
+        if not isinstance(question, str):
+
+            return jsonify({
+                "error": "Question must be text."
+            }), 400
+
+        question = question.strip()
 
         if not question:
+
             return jsonify({
                 "error": "Please enter a question."
             }), 400
 
-        # Generate SQL
-        sql = generate_sql(question)
+        if len(question) > 1000:
 
-        # Validate SQL
-        if not is_safe_sql(sql):
             return jsonify({
-                "error": "Generated SQL query was rejected for safety.",
-                "sql": sql
+                "error": "Question is too long. Please keep it under 1000 characters."
             }), 400
 
-        # Execute SQL
-        columns, rows = execute_sql(sql)
+        # ------------------------------------------
+        # Generate, validate and execute SQL
+        # ------------------------------------------
 
+        sql, columns, rows = process_question(question)
+
+        # ------------------------------------------
         # Explain results
+        # ------------------------------------------
+
         explanation = explain_result(
             question,
             sql,
@@ -400,23 +713,41 @@ def ask_question():
         )
 
         return jsonify({
+
             "question": question,
+
             "sql": sql,
+
             "columns": columns,
+
             "rows": rows,
+
             "explanation": explanation
+
         })
 
+    except ValueError as error:
+
+        return jsonify({
+            "error": str(error)
+        }), 400
+
     except sqlite3.Error as error:
+
+        app.logger.exception("Database error")
+
         return jsonify({
             "error": f"Database error: {str(error)}"
         }), 500
 
     except Exception as error:
-        app.logger.exception("Question processing failed")
+
+        app.logger.exception(
+            "Question processing failed"
+        )
 
         return jsonify({
-            "error": str(error)
+            "error": "Something went wrong while processing your question."
         }), 500
 
 
@@ -425,8 +756,9 @@ def ask_question():
 # --------------------------------------------------
 
 if __name__ == "__main__":
+
     app.run(
-        host="127.0.0.1",
-        port=5000,
-        debug=True
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", 5000)),
+        debug=False
     )
