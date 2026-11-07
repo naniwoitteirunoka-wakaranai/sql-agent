@@ -9,7 +9,15 @@ import zstandard as zstd
 import sqlglot
 from sqlglot import exp
 
-from flask import Flask, render_template, request, jsonify
+from flask import (
+    Flask,
+    render_template,
+    request,
+    jsonify,
+    Response,
+    stream_with_context
+)
+
 from dotenv import load_dotenv
 from groq import Groq
 
@@ -52,7 +60,7 @@ def ensure_database():
 
     if not COMPRESSED_DB_PATH.exists():
         raise FileNotFoundError(
-            f"Database not found: {COMPRESSED_DB_PATH}"
+            f"Compressed database not found: {COMPRESSED_DB_PATH}"
         )
 
     print("Restoring compressed database...")
@@ -186,7 +194,7 @@ ingredients.id -> product_ingredients.ingredient_id
 
 
 # ==================================================
-# SQL CLEANING
+# CLEAN SQL
 # ==================================================
 
 def clean_sql(sql):
@@ -331,7 +339,7 @@ def sqlite_authorizer(action, arg1, arg2, database, trigger):
 
 
 # ==================================================
-# CONVERSATION CONTEXT
+# CONVERSATION HISTORY
 # ==================================================
 
 def clean_history(history):
@@ -403,10 +411,10 @@ Your previous SQL was invalid.
 Previous SQL:
 {previous_sql}
 
-Validation error:
+Validation or execution error:
 {error_message}
 
-Correct the SQL using the actual schema.
+Correct the SQL using the actual database schema.
 """
 
     system_prompt = f"""
@@ -434,8 +442,8 @@ RULES:
 10. Never invent tables or columns.
 11. Do not generate multiple SQL statements.
 12. Use previous conversation context to resolve follow-up questions.
-13. If the user refers to "it", "that city", "second one",
-    or similar phrases, interpret them using conversation history.
+13. Resolve references such as "it", "that city", "second one",
+    and "those products" using conversation history.
 14. Return SQL only, without Markdown or explanations.
 
 {correction_context}
@@ -485,7 +493,9 @@ def execute_sql(sql):
         cursor = connection.execute(sql)
 
         if cursor.description is None:
-            raise ValueError("Query did not return a result set.")
+            raise ValueError(
+                "Query did not return a result set."
+            )
 
         rows = cursor.fetchmany(MAX_SQL_ROWS)
 
@@ -514,6 +524,11 @@ def explain_result(
     history=None
 ):
 
+    result_data = {
+        "columns": columns,
+        "rows": rows
+    }
+
     prompt = f"""
 You are a business analyst for Veloura Chocolates.
 
@@ -527,10 +542,7 @@ SQL query:
 {sql}
 
 Actual database results:
-{json.dumps({
-    "columns": columns,
-    "rows": rows
-}, default=str)}
+{json.dumps(result_data, default=str)}
 
 Explain the results in concise business language.
 
@@ -567,140 +579,182 @@ Rules:
 
 
 # ==================================================
-# AGENT WORKFLOW
+# LIVE AGENT STREAM
 # ==================================================
 
-def process_question(question, history):
+def stream_agent(question, history):
 
-    trace = []
+    def send_event(event_type, payload):
 
-    def add_step(name, detail, status="completed"):
+        return (
+            "data: "
+            + json.dumps(
+                {"type": event_type, **payload},
+                default=str
+            )
+            + "\n\n"
+        )
 
-        trace.append({
+    def send_trace(name, detail, status="completed"):
+
+        return send_event("trace", {
             "name": name,
             "detail": detail,
             "status": status
         })
 
-    add_step(
-        "Understanding request",
-        "Processing the business question and conversation context."
-    )
+    try:
 
-    previous_sql = None
-    validation_error = None
-    sql = None
-    columns = None
-    rows = None
+        # STEP 1: Understand request
 
-    for attempt in range(2):
-
-        add_step(
-            "Generating SQL",
-            "Groq is generating a SQLite query."
-            if attempt == 0 else
-            "Groq is correcting the previous SQL query."
+        yield send_trace(
+            "Understanding request",
+            "Processing your business question and conversation context."
         )
 
-        sql = generate_sql(
-            question,
-            history,
-            previous_sql,
-            validation_error
-        )
+        previous_sql = None
+        validation_error = None
 
-        add_step(
-            "Validating SQL",
-            "Checking SQL syntax, query type and database compatibility."
-        )
+        sql = None
+        columns = None
+        rows = None
 
-        valid, validation_message = validate_sql(sql)
+        # STEP 2: Generate and validate SQL
 
-        if not valid:
+        for attempt in range(2):
 
-            add_step(
-                "SQL validation",
-                validation_message,
-                "failed"
+            yield send_trace(
+                "Generating SQL",
+                "Groq is generating a SQLite query."
+                if attempt == 0 else
+                "Groq is correcting the previous query."
             )
 
-            previous_sql = sql
-            validation_error = validation_message
+            sql = generate_sql(
+                question,
+                history,
+                previous_sql,
+                validation_error
+            )
 
-            if attempt == 0:
+            yield send_trace(
+                "Validating SQL",
+                "Checking SQL syntax, query type and database compatibility."
+            )
 
-                add_step(
-                    "Self-correction",
-                    "Sending the validation error back to Groq for correction."
+            valid, message = validate_sql(sql)
+
+            if not valid:
+
+                yield send_trace(
+                    "SQL validation",
+                    message,
+                    "failed"
                 )
 
-            continue
+                previous_sql = sql
+                validation_error = message
 
-        add_step(
-            "SQL validation",
-            "Query passed validation. Only read operations are permitted."
-        )
+                if attempt == 0:
 
-        try:
+                    yield send_trace(
+                        "Self-correction",
+                        "Sending the validation error back to Groq."
+                    )
 
-            add_step(
+                continue
+
+            yield send_trace(
+                "SQL validation",
+                "Query passed validation. Read-only access confirmed."
+            )
+
+            # STEP 3: Execute query
+
+            yield send_trace(
                 "Database execution",
                 "Executing the validated query against SQLite."
             )
 
-            columns, rows = execute_sql(sql)
+            try:
 
-            add_step(
-                "Database execution",
-                f"Query completed successfully. Returned {len(rows)} rows."
-            )
+                columns, rows = execute_sql(sql)
 
-            break
-
-        except (sqlite3.Error, ValueError) as error:
-
-            add_step(
-                "Database execution",
-                str(error),
-                "failed"
-            )
-
-            previous_sql = sql
-            validation_error = str(error)
-
-            if attempt == 0:
-
-                add_step(
-                    "Self-correction",
-                    "Attempting to correct the query using the execution error."
+                yield send_trace(
+                    "Database execution",
+                    f"Successfully retrieved {len(rows)} rows."
                 )
 
-    if columns is None:
+                break
 
-        raise ValueError(
-            "Unable to generate a valid query after two attempts. "
-            f"Last error: {validation_error}"
+            except (sqlite3.Error, ValueError) as error:
+
+                yield send_trace(
+                    "Database execution",
+                    str(error),
+                    "failed"
+                )
+
+                previous_sql = sql
+                validation_error = str(error)
+
+                if attempt == 0:
+
+                    yield send_trace(
+                        "Self-correction",
+                        "Attempting to correct the query using the execution error."
+                    )
+
+        if columns is None:
+
+            raise ValueError(
+                "Could not generate a valid SQL query after two attempts. "
+                f"Last error: {validation_error}"
+            )
+
+        # STEP 4: Explain results
+
+        yield send_trace(
+            "Generating business insight",
+            "Groq is analysing the database results."
         )
 
-    add_step(
-        "Generating business insight",
-        "Groq is interpreting the database results."
-    )
+        explanation = explain_result(
+            question,
+            sql,
+            columns,
+            rows,
+            history
+        )
 
-    explanation = explain_result(
-        question,
-        sql,
-        columns,
-        rows,
-        history
-    )
+        yield send_trace(
+            "Completed",
+            "Your business answer is ready."
+        )
 
-    add_step(
-        "Completed",
-        "Business explanation generated successfully."
-    )
+        # STEP 5: Send result
 
-    return sql, columns, rows, explanation, trace
+        yield send_event("result", {
+            "question": question,
+            "sql": sql,
+            "columns": columns,
+            "rows": rows,
+            "explanation": explanation
+        })
+
+    except Exception as error:
+
+        app.logger.exception("Streaming agent failed")
+
+        message = (
+            str(error)
+            if isinstance(error, ValueError)
+            else "Something went wrong while processing your question."
+        )
+
+        yield send_event("error", {
+            "error": message
+        })
 
 
 # ==================================================
@@ -709,73 +763,61 @@ def process_question(question, history):
 
 @app.route("/")
 def dashboard():
+
     return render_template("dashboard.html")
 
 
-@app.route("/api/ask", methods=["POST"])
-def ask_question():
+@app.route("/api/ask/stream", methods=["POST"])
+def ask_question_stream():
 
-    try:
+    data = request.get_json(silent=True)
 
-        data = request.get_json(silent=True)
-
-        if not isinstance(data, dict):
-            return jsonify({
-                "error": "No request data provided."
-            }), 400
-
-        question = data.get("question", "")
-
-        if not isinstance(question, str):
-            return jsonify({
-                "error": "Question must be text."
-            }), 400
-
-        question = question.strip()
-
-        if not question:
-            return jsonify({
-                "error": "Please enter a question."
-            }), 400
-
-        if len(question) > 1000:
-            return jsonify({
-                "error": "Question must be under 1000 characters."
-            }), 400
-
-        history = clean_history(
-            data.get("history", [])
-        )
-
-        sql, columns, rows, explanation, trace = process_question(
-            question,
-            history
-        )
+    if not isinstance(data, dict):
 
         return jsonify({
-
-            "question": question,
-            "sql": sql,
-            "columns": columns,
-            "rows": rows,
-            "explanation": explanation,
-            "trace": trace
-
-        })
-
-    except ValueError as error:
-
-        return jsonify({
-            "error": str(error)
+            "error": "No request data provided."
         }), 400
 
-    except Exception:
+    question = data.get("question", "")
 
-        app.logger.exception("Question processing failed")
+    if not isinstance(question, str):
 
         return jsonify({
-            "error": "Something went wrong while processing your question."
-        }), 500
+            "error": "Question must be text."
+        }), 400
+
+    question = question.strip()
+
+    if not question:
+
+        return jsonify({
+            "error": "Please enter a question."
+        }), 400
+
+    if len(question) > 1000:
+
+        return jsonify({
+            "error": "Question must be under 1000 characters."
+        }), 400
+
+    history = clean_history(
+        data.get("history", [])
+    )
+
+    return Response(
+
+        stream_with_context(
+            stream_agent(question, history)
+        ),
+
+        mimetype="text/event-stream",
+
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive"
+        }
+    )
 
 
 # ==================================================
@@ -787,5 +829,6 @@ if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=int(os.getenv("PORT", 5000)),
-        debug=False
+        debug=False,
+        threaded=True
     )
