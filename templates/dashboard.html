@@ -1,24 +1,23 @@
 
 {% extends "base.html" %}
 
-{% block title %}Veloura Chocolates · AI Dashboard{% endblock %}
+{% block title %}Veloura Chocolates · AI Analytics{% endblock %}
 
 {% block content %}
 
 <div class="dashboard">
 
     <header class="dashboard-header">
-        <div>
-            <h1>VELOURA CHOCOLATES · AI ANALYTICS</h1>
-            <p class="subtitle">
-                Ask questions about sales, customers, products,
-                employees and ingredients using natural language.
-            </p>
-        </div>
+        <h1>VELOURA CHOCOLATES · AI ANALYTICS</h1>
+
+        <p class="subtitle">
+            Ask questions about sales, customers, products,
+            employees and ingredients using natural language.
+        </p>
     </header>
 
 
-    <!-- QUESTION CARD -->
+    <!-- QUESTION INPUT -->
 
     <section class="ask-card">
 
@@ -32,7 +31,6 @@
 
                 <textarea
                     id="question"
-                    name="question"
                     rows="1"
                     placeholder="Ask something like: What are our 10 highest-revenue products?"
                     required
@@ -87,7 +85,7 @@
     <section id="resultsSection" class="results-section hidden">
 
 
-        <!-- EXECUTION TRACE -->
+        <!-- LIVE EXECUTION TRACE -->
 
         <div class="result-card trace-card">
 
@@ -99,7 +97,7 @@
                 </div>
 
                 <span id="traceStatus" class="row-count">
-                    Processing
+                    Waiting
                 </span>
 
             </div>
@@ -124,7 +122,9 @@
 
             </div>
 
-            <div id="explanation" class="explanation"></div>
+            <div id="explanation" class="explanation">
+                Your business insights will appear here.
+            </div>
 
         </div>
 
@@ -154,7 +154,7 @@
         </div>
 
 
-        <!-- RESULTS TABLE -->
+        <!-- DATABASE RESULTS -->
 
         <div class="result-card table-card">
 
@@ -172,10 +172,8 @@
             <div class="table-wrapper">
 
                 <table id="resultsTable">
-
                     <thead id="resultsHead"></thead>
                     <tbody id="resultsBody"></tbody>
-
                 </table>
 
             </div>
@@ -183,7 +181,7 @@
         </div>
 
 
-        <!-- FOLLOW-UP QUESTIONS -->
+        <!-- FOLLOW-UP CONVERSATION -->
 
         <div class="result-card followup-card">
 
@@ -211,17 +209,17 @@
 
                 <div class="followup-examples">
 
-                    <button type="button" class="example-btn"
+                    <button type="button" class="followup-btn"
                         data-followup="What about the second one?">
                         What about the second one?
                     </button>
 
-                    <button type="button" class="example-btn"
+                    <button type="button" class="followup-btn"
                         data-followup="Compare it with the previous result.">
                         Compare with previous result
                     </button>
 
-                    <button type="button" class="example-btn"
+                    <button type="button" class="followup-btn"
                         data-followup="Show me more details about that.">
                         Show me more details
                     </button>
@@ -260,6 +258,7 @@ const resultsHead = document.getElementById("resultsHead");
 const resultsBody = document.getElementById("resultsBody");
 
 const rowCount = document.getElementById("rowCount");
+
 const copySqlButton = document.getElementById("copySqlButton");
 
 const executionTrace = document.getElementById("executionTrace");
@@ -279,7 +278,7 @@ let isProcessing = false;
 
 
 // ==================================================
-// AUTO RESIZE TEXTAREA
+// AUTO RESIZE
 // ==================================================
 
 function autoResizeTextarea() {
@@ -290,7 +289,10 @@ function autoResizeTextarea() {
         Math.min(questionInput.scrollHeight, 220) + "px";
 }
 
-questionInput.addEventListener("input", autoResizeTextarea);
+questionInput.addEventListener(
+    "input",
+    autoResizeTextarea
+);
 
 
 // ==================================================
@@ -313,16 +315,14 @@ document.querySelectorAll(".example-btn").forEach(button => {
 
 
 // ==================================================
-// FOLLOW-UP BUTTONS
+// FOLLOW-UP QUESTIONS
 // ==================================================
 
 document.querySelectorAll(".followup-btn").forEach(button => {
 
     button.addEventListener("click", () => {
 
-        if (conversationHistory.length === 0) {
-            return;
-        }
+        if (!conversationHistory.length) return;
 
         questionInput.value = button.dataset.followup;
 
@@ -336,71 +336,69 @@ document.querySelectorAll(".followup-btn").forEach(button => {
 
 
 // ==================================================
-// EXECUTION TRACE
+// LIVE TRACE RENDERING
 // ==================================================
 
-function renderTrace(steps) {
+function addLiveTrace(step) {
 
-    executionTrace.innerHTML = "";
+    const item = document.createElement("div");
 
-    traceStatus.textContent = "Running";
+    item.className = "trace-step";
 
-    steps.forEach((step, index) => {
+    const marker = document.createElement("div");
 
-        const item = document.createElement("div");
+    marker.className = "trace-marker";
 
-        item.className = "trace-step";
+    marker.textContent =
+        step.status === "failed" ? "!" : "✓";
 
-        const marker = document.createElement("div");
+    const content = document.createElement("div");
 
-        marker.className = "trace-marker";
+    content.className = "trace-step-content";
 
-        marker.textContent = "•";
+    const heading = document.createElement("strong");
 
-        const content = document.createElement("div");
+    heading.textContent = step.name;
 
-        content.className = "trace-step-content";
+    const detail = document.createElement("p");
 
-        const heading = document.createElement("strong");
+    detail.textContent = step.detail;
 
-        heading.textContent = step.name;
+    const status = document.createElement("span");
 
-        const detail = document.createElement("p");
+    status.className = "trace-step-status";
 
-        detail.textContent = step.detail;
+    status.textContent =
+        step.status === "failed"
+            ? "✕ Failed"
+            : "✓ Completed";
 
-        const status = document.createElement("span");
+    if (step.status === "failed") {
+        item.classList.add("trace-failed");
+    }
 
-        status.className = "trace-step-status";
+    content.appendChild(heading);
+    content.appendChild(detail);
+    content.appendChild(status);
 
-        status.textContent =
-            step.status === "failed" ? "Failed" : "Completed";
+    item.appendChild(marker);
+    item.appendChild(content);
 
-        if (step.status === "failed") {
-            item.classList.add("trace-failed");
-        }
+    executionTrace.appendChild(item);
 
-        content.appendChild(heading);
-        content.appendChild(detail);
-        content.appendChild(status);
-
-        item.appendChild(marker);
-        item.appendChild(content);
-
-        executionTrace.appendChild(item);
-
-        setTimeout(() => {
-            item.classList.add("trace-visible");
-        }, index * 100);
-
+    requestAnimationFrame(() => {
+        item.classList.add("trace-visible");
     });
 
-    traceStatus.textContent = "Completed";
+    item.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest"
+    });
 }
 
 
 // ==================================================
-// RENDER RESULTS TABLE
+// RENDER TABLE
 // ==================================================
 
 function renderTable(columns, rows) {
@@ -452,6 +450,104 @@ function renderTable(columns, rows) {
 
 
 // ==================================================
+// READ SSE STREAM
+// ==================================================
+
+async function readAgentStream(response) {
+
+    const reader = response.body.getReader();
+
+    const decoder = new TextDecoder();
+
+    let buffer = "";
+
+    let finalResult = null;
+
+    while (true) {
+
+        const { value, done } = await reader.read();
+
+        if (done) break;
+
+        buffer += decoder.decode(value, {
+            stream: true
+        });
+
+        const events = buffer.split("\n\n");
+
+        buffer = events.pop() || "";
+
+        for (const rawEvent of events) {
+
+            const dataLine = rawEvent
+                .split("\n")
+                .find(line => line.startsWith("data:"));
+
+            if (!dataLine) continue;
+
+            const payload = JSON.parse(
+                dataLine.slice(5).trim()
+            );
+
+            if (payload.type === "trace") {
+
+                addLiveTrace(payload);
+
+            } else if (payload.type === "result") {
+
+                finalResult = payload;
+
+            } else if (payload.type === "error") {
+
+                throw new Error(payload.error);
+
+            }
+
+        }
+
+    }
+
+    // Process any final event remaining in the buffer
+
+    if (buffer.trim()) {
+
+        const dataLine = buffer
+            .split("\n")
+            .find(line => line.startsWith("data:"));
+
+        if (dataLine) {
+
+            const payload = JSON.parse(
+                dataLine.slice(5).trim()
+            );
+
+            if (payload.type === "trace") {
+                addLiveTrace(payload);
+            }
+
+            if (payload.type === "result") {
+                finalResult = payload;
+            }
+
+            if (payload.type === "error") {
+                throw new Error(payload.error);
+            }
+
+        }
+
+    }
+
+    if (!finalResult) {
+        throw new Error(
+            "The agent finished without returning a result."
+        );
+    }
+
+    return finalResult;
+}
+
+
+// ==================================================
 // ASK AI
 // ==================================================
 
@@ -473,11 +569,16 @@ form.addEventListener("submit", async event => {
 
     executionTrace.innerHTML = "";
 
-    traceStatus.textContent = "Processing";
+    traceStatus.textContent = "Running";
 
-    explanation.textContent = "Analysing your business question...";
+    explanation.textContent = "Waiting for agent...";
 
     sqlOutput.textContent = "";
+
+    resultsHead.innerHTML = "";
+    resultsBody.innerHTML = "";
+
+    rowCount.textContent = "";
 
     askButton.disabled = true;
 
@@ -487,12 +588,13 @@ form.addEventListener("submit", async event => {
 
     try {
 
-        const response = await fetch("/api/ask", {
+        const response = await fetch("/api/ask/stream", {
 
             method: "POST",
 
             headers: {
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "Accept": "text/event-stream"
             },
 
             body: JSON.stringify({
@@ -505,46 +607,48 @@ form.addEventListener("submit", async event => {
 
         });
 
-        const responseText = await response.text();
+        if (!response.ok) {
 
-        let data;
+            const errorData = await response.json().catch(
+                () => ({})
+            );
 
-        try {
-            data = JSON.parse(responseText);
-        } catch {
             throw new Error(
-                `Server returned ${response.status}: ${
-                    responseText || "Empty response"
-                }`
+                errorData.error ||
+                `Server error: ${response.status}`
             );
         }
 
-        if (!response.ok) {
-            throw new Error(data.error || "Something went wrong.");
+        if (!response.body) {
+            throw new Error("Streaming is not supported.");
         }
 
+        const contentType =
+            response.headers.get("content-type") || "";
 
-        // Execution trace
+        if (!contentType.includes("text/event-stream")) {
+            throw new Error("Server did not return a streaming response.");
+        }
 
-        renderTrace(data.trace || []);
+        const result = await readAgentStream(response);
 
 
-        // Explanation
+        // Display explanation
 
         explanation.textContent =
-            data.explanation || "No explanation available.";
+            result.explanation || "No explanation available.";
 
 
-        // SQL
+        // Display SQL
 
-        sqlOutput.textContent = data.sql || "";
+        sqlOutput.textContent = result.sql || "";
 
 
-        // Results table
+        // Display table
 
         renderTable(
-            data.columns || [],
-            data.rows || []
+            result.columns || [],
+            result.rows || []
         );
 
 
@@ -554,7 +658,7 @@ form.addEventListener("submit", async event => {
 
             question: question,
 
-            answer: data.explanation || ""
+            answer: result.explanation || ""
 
         });
 
@@ -565,6 +669,8 @@ form.addEventListener("submit", async event => {
         conversationStatus.textContent =
             `${conversationHistory.length} conversation turn(s) remembered. Ask a follow-up!`;
 
+
+        traceStatus.textContent = "Completed";
 
         resultsSection.scrollIntoView({
 
@@ -603,6 +709,8 @@ form.addEventListener("submit", async event => {
 
 clearChatButton.addEventListener("click", () => {
 
+    if (isProcessing) return;
+
     conversationHistory = [];
 
     conversationStatus.textContent =
@@ -611,6 +719,10 @@ clearChatButton.addEventListener("click", () => {
     executionTrace.innerHTML = "";
 
     traceStatus.textContent = "Ready";
+
+    resultsSection.classList.add("hidden");
+
+    questionInput.focus();
 
 });
 
